@@ -4,6 +4,9 @@ module instruction_fetch (
     output reg invAddr
 );
     reg [31:0] instr_mem [0:1023]; 
+    initial begin
+        $readmemb("instructions.txt", instr_mem);
+    end
 
     always @(*) begin
         if (PC[1:0] != 0 || PC[63:2] > 1023) begin

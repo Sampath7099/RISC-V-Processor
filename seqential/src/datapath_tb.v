@@ -11,9 +11,7 @@ module datapath_tb;
     // Clock generation
     always #5 clock = ~clock; // Generate a clock with period 10ns
     
-    initial begin
-        $readmemb("instructions.txt", uut.IF_stage.instr_mem);
-    end
+
     
     // Test sequence
     initial begin
