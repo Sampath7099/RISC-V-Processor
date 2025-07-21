@@ -34,6 +34,17 @@ module datapath(
     wire invAddr;
 
     // ----------------------------------------------------
+    // Instruction Fetch Stage
+    // ----------------------------------------------------
+    instruction_fetch IF_stage (
+        .PC(PC),
+        .instruction(instruction),
+        .invAddr(invAddr)
+    );
+
+    
+
+    // ----------------------------------------------------
     // Instruction Decode Wires
     // ----------------------------------------------------
     wire [4:0] rs1, rs2;
@@ -43,28 +54,12 @@ module datapath(
     wire invOp, invFunc, invRegAddr;
 
     // ----------------------------------------------------
-    // Execute & ALU Wires
+    // Immediate Value Calculation
     // ----------------------------------------------------
-    wire [63:0] rd1, rd2;
-    wire [63:0] alu_output, next_PC;
-    wire [63:0] immediate;
-    wire [63:0] wd;
-
-    // ----------------------------------------------------
-    // Memory Access Wires
-    // ----------------------------------------------------
-    wire invMemAddr;
-    reg [63:0] read_data;
-
-    // ----------------------------------------------------
-    // Instruction Fetch Stage
-    // ----------------------------------------------------
-    instruction_fetch IF_stage (
-        .PC(PC),
-        .instruction(instruction),
-        .invAddr(invAddr)
-    );
-
+    wire [63:0] immediate_value;
+    assign immediate_value = MemWrite ? {{52{instruction[31]}}, instruction[31:25], instruction[11:7]} : // Store
+                                          {{52{instruction[31]}}, instruction[31:20]};                 // Load
+    
     // ----------------------------------------------------
     // Instruction Decode Stage
     // ----------------------------------------------------
@@ -84,13 +79,6 @@ module datapath(
         .invFunc(invFunc),
         .invRegAddr(invRegAddr)
     );
-
-    // ----------------------------------------------------
-    // Immediate Value Calculation
-    // ----------------------------------------------------
-    wire [63:0] immediate_value;
-    assign immediate_value = MemWrite ? {{52{instruction[31]}}, instruction[31:25], instruction[11:7]} : // Store
-                                          {{52{instruction[31]}}, instruction[31:20]};                 // Load
 
     assign immediate = (alu_control_signal == 4'b0010) ? immediate_value :
                        (alu_control_signal == 4'b0110) ? {{51{instruction[31]}}, instruction[7], instruction[30:25], instruction[11:8]} : // Branch
@@ -114,6 +102,14 @@ module datapath(
     );
 
     // ----------------------------------------------------
+    // Execute & ALU Wires
+    // ----------------------------------------------------
+    wire [63:0] rd1, rd2;
+    wire [63:0] alu_output, next_PC;
+    wire [63:0] immediate;
+    wire [63:0] wd;
+
+    // ----------------------------------------------------
     // Execute Stage
     // ----------------------------------------------------
     execute EX_stage (
@@ -126,6 +122,12 @@ module datapath(
         .alu_output(alu_output),
         .next_PC(next_PC)
     );
+
+    // ----------------------------------------------------
+    // Memory Access Wires
+    // ----------------------------------------------------
+    wire invMemAddr;
+    reg [63:0] read_data;
 
     // ----------------------------------------------------
     // Memory Access Stage
@@ -147,6 +149,27 @@ module datapath(
         .select(MemtoReg),
         .out(wd)
     );
+
+    // ----------------------------------------------------
+    // Register Writeback and Memory Write
+    // ----------------------------------------------------
+    always @(posedge clock) begin
+        if (RegWrite & !invRegAddr & write_addr != 0)
+            register[write_addr] <= wd;
+        else if (MemWrite & !invMemAddr)
+            data_memory[alu_output / 8] <= w1;
+    end
+
+    // ----------------------------------------------------
+    // Memory Read
+    // ----------------------------------------------------
+    always @(*) begin
+        if (~invMemAddr) begin
+            if (MemRead)
+                read_data <= data_memory[alu_output / 8];
+        end
+    end
+
 
     // ----------------------------------------------------
     // PC Update & Halt Conditions
@@ -193,24 +216,5 @@ module datapath(
         end
     end
 
-    // ----------------------------------------------------
-    // Register Writeback and Memory Write
-    // ----------------------------------------------------
-    always @(posedge clock) begin
-        if (RegWrite & !invRegAddr & write_addr != 0)
-            register[write_addr] <= wd;
-        else if (MemWrite & !invMemAddr)
-            data_memory[alu_output / 8] <= w1;
-    end
-
-    // ----------------------------------------------------
-    // Memory Read
-    // ----------------------------------------------------
-    always @(*) begin
-        if (~invMemAddr) begin
-            if (MemRead)
-                read_data <= data_memory[alu_output / 8];
-        end
-    end
-
+    
 endmodule
